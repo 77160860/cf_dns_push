@@ -1,5 +1,6 @@
 可选接口:
 https://ip.164746.xyz/ipTop.html 
+https://ip.164746.xyz/ipTop10.html
 
 #### 配置方法
 1. fork本项目
