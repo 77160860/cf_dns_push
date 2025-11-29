@@ -18,27 +18,42 @@ HEADERS = {
 
 ALIYUN_DNS_SERVERS = ['223.5.5.5', '223.6.6.6']
 
-def resolve_domain_ips_aliyun(domain, depth=5):
-    """通过阿里云DNS递归解析域名IPv4地址"""
+
+def resolve_domain_ips_aliyun_all(domain, depth=5, resolver=None):
+    """
+    通过阿里DNS递归解析域名，返回该域名所有A记录IP（递归遍历所有CNAME）
+    """
     if depth == 0:
         return []
-    resolver = dns.resolver.Resolver(configure=False)
-    resolver.nameservers = ALIYUN_DNS_SERVERS
+
+    if resolver is None:
+        resolver = dns.resolver.Resolver(configure=False)
+        resolver.nameservers = ALIYUN_DNS_SERVERS
+
+    ips = []
     try:
         answers = resolver.resolve(domain, 'A')
-        return [rdata.to_text() for rdata in answers]
+        ips.extend([rdata.to_text() for rdata in answers])
     except dns.resolver.NoAnswer:
         try:
             cnames = resolver.resolve(domain, 'CNAME')
             for cname in cnames:
                 cname_target = cname.target.to_text().rstrip('.')
-                return resolve_domain_ips_aliyun(cname_target, depth - 1)
+                ips.extend(resolve_domain_ips_aliyun_all(cname_target, depth - 1, resolver))
         except Exception as e:
-            print(f"阿里DNS查询 CNAME 失败: {e}")
-            return []
+            print(f"阿里DNS 查询 CNAME 失败: {e}")
     except Exception as e:
-        print(f"阿里DNS查询 A 记录失败: {e}")
-        return []
+        print(f"阿里DNS 查询 A 记录失败: {e}")
+
+    # 去重且保持顺序
+    seen = set()
+    unique_ips = []
+    for ip in ips:
+        if ip not in seen:
+            seen.add(ip)
+            unique_ips.append(ip)
+    return unique_ips
+
 
 def extract_ipv4s(text: str):
     pattern = r'(?:\d{1,3}\.){3}\d{1,3}'
@@ -57,6 +72,7 @@ def extract_ipv4s(text: str):
             result.append(ip)
     return result
 
+
 def get_ips_from_github_raw(url):
     try:
         resp = requests.get(url, timeout=15)
@@ -71,9 +87,10 @@ def get_ips_from_github_raw(url):
         traceback.print_exc()
         return []
 
+
 def list_a_records(name):
     url = f"https://api.cloudflare.com/client/v4/zones/{CF_ZONE_ID}/dns_records"
-    params = {'type':'A', 'name':name, 'per_page':100}
+    params = {'type': 'A', 'name': name, 'per_page': 100}
     try:
         resp = requests.get(url, headers=HEADERS, params=params, timeout=10)
         resp.raise_for_status()
@@ -82,6 +99,7 @@ def list_a_records(name):
         print(f"列出 A 记录异常: {e}")
         traceback.print_exc()
         return []
+
 
 def delete_dns_record(record_id):
     url = f"https://api.cloudflare.com/client/v4/zones/{CF_ZONE_ID}/dns_records/{record_id}"
@@ -95,6 +113,7 @@ def delete_dns_record(record_id):
         traceback.print_exc()
         return False
 
+
 def delete_all_a_records(name):
     records = list_a_records(name)
     success = True
@@ -104,10 +123,11 @@ def delete_all_a_records(name):
             success = delete_dns_record(rid) and success
     return success
 
+
 def create_dns_record(name, ip):
     url = f"https://api.cloudflare.com/client/v4/zones/{CF_ZONE_ID}/dns_records"
     data = {
-        'type':'A',
+        'type': 'A',
         'name': name,
         'content': ip,
     }
@@ -121,6 +141,7 @@ def create_dns_record(name, ip):
         traceback.print_exc()
         return f"ip:{ip} 添加失败"
 
+
 def push_plus(content):
     if not PUSHPLUS_TOKEN:
         print("PUSHPLUS_TOKEN 为空，跳过推送")
@@ -128,7 +149,7 @@ def push_plus(content):
     url = "http://www.pushplus.plus/send"
     data = {
         "token": PUSHPLUS_TOKEN,
-        "title": "IP优选DNS CF推送",
+        "title": "IP优选DNSCF推送",
         "content": content,
         "template": "markdown",
         "channel": "wechat"
@@ -138,12 +159,13 @@ def push_plus(content):
     except Exception as e:
         print(f"PushPlus 推送异常: {e}")
 
+
 def main():
     domain = "cm.cf.cname.vvhan.com"
     github_url = "https://raw.githubusercontent.com/gslege/CloudflareIP/main/Cfxyz.txt"
 
     print(f"使用阿里云 DNS 解析 {domain}")
-    domain_ips = resolve_domain_ips_aliyun(domain)
+    domain_ips = resolve_domain_ips_aliyun_all(domain)
     print(f"阿里云 DNS 解析到的IP: {domain_ips}")
 
     print(f"从 GitHub 获取 IP 列表: {github_url}")
@@ -165,6 +187,7 @@ def main():
     results = [create_dns_record(CF_DNS_NAME, ip) for ip in all_ips]
 
     push_plus("\n".join(results))
+
 
 if __name__ == "__main__":
     main()
