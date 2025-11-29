@@ -1,14 +1,11 @@
-import dns.resolver
-import os
 import requests
-import traceback
-import re
+import os
 import json
-import time
+import traceback
 
-CF_API_TOKEN = os.environ.get("CF_API_TOKEN", "")
-CF_ZONE_ID = os.environ.get("CF_ZONE_ID", "")
-CF_DNS_NAME = os.environ.get("CF_DNS_NAME", "")
+CF_API_TOKEN = os.environ["CF_API_TOKEN"]
+CF_ZONE_ID = os.environ["CF_ZONE_ID"]
+CF_DNS_NAME = os.environ["CF_DNS_NAME"]
 PUSHPLUS_TOKEN = os.environ.get("PUSHPLUS_TOKEN", "")
 
 HEADERS = {
@@ -16,125 +13,96 @@ HEADERS = {
     "Content-Type": "application/json"
 }
 
-
-def extract_ipv4s(text):
-    candidates = re.findall(r"(?:\d{1,3}\.){3}\d{1,3}", text)
-    def valid(ip):
-        try:
-            parts = list(map(int, ip.split(".")))
-            return len(parts) == 4 and all(0 <= p <= 255 for p in parts)
-        except:
-            return False
-    seen = set()
-    ips = []
-    for ip in candidates:
-        if valid(ip) and ip not in seen:
-            seen.add(ip)
-            ips.append(ip)
-    return ips
-
-
-def get_ips_from_urls(urls):
-    seen = set()
-    ips = []
-    headers = {"User-Agent": "Mozilla/5.0 (compatible; IPFetcher/1.0)"}
-    for url in urls:
-        try:
-            resp = requests.get(url, headers=headers, timeout=10)
-            if resp.status_code == 200 and resp.text:
-                extracted = extract_ipv4s(resp.text)
-                for ip in extracted:
-                    if ip not in seen:
-                        seen.add(ip)
-                        ips.append(ip)
-        except Exception as e:
-            print(f"Error fetching {url}: {e}")
-    return ips
-
-
-def resolve_cname_recursive(domain, max_depth=5):
-    # 递归解析CNAME直到拿到A记录或达到最大递归深度
-    if max_depth == 0:
-        return []
+def get_ips_via_google_dns(domain):
+    url = f"https://dns.google/resolve?name={domain}&type=A"
     try:
-        answers = dns.resolver.resolve(domain, "A")
-        return [rdata.to_text() for rdata in answers]
-    except dns.resolver.NoAnswer:
-        try:
-            cnames = dns.resolver.resolve(domain, "CNAME")
-            for cname in cnames:
-                target = cname.target.to_text().rstrip(".")
-                return resolve_cname_recursive(target, max_depth - 1)
-        except Exception as e:
-            print(f"Failed to resolve CNAME for {domain}: {e}")
+        resp = requests.get(url, timeout=10)
+        resp.raise_for_status()
+        data = resp.json()
+        if "Answer" in data:
+            ips = [answer["data"] for answer in data["Answer"] if answer["type"] == 1]
+            return list(dict.fromkeys(ips))  # 去重且保证顺序
+        else:
+            print(f"No A record found for {domain} in Google DNS response.")
     except Exception as e:
-        print(f"Error resolving {domain}: {e}")
+        print(f"Exception during Google DNS query: {e}")
+        traceback.print_exc()
     return []
 
+def get_ips_from_github_raw(url):
+    try:
+        resp = requests.get(url, timeout=10)
+        resp.raise_for_status()
+        ips = []
+        for line in resp.text.splitlines():
+            parts = line.strip().split()
+            for part in parts:
+                if validate_ip(part):
+                    ips.append(part)
+        return list(dict.fromkeys(ips))
+    except Exception as e:
+        print(f"Exception fetching IPs from GitHub raw: {e}")
+        traceback.print_exc()
+    return []
+
+def validate_ip(ip_str):
+    parts = ip_str.split(".")
+    if len(parts) != 4:
+        return False
+    try:
+        return all(0 <= int(part) <= 255 for part in parts)
+    except:
+        return False
 
 def list_a_records(name):
     url = f"https://api.cloudflare.com/client/v4/zones/{CF_ZONE_ID}/dns_records"
     params = {"type": "A", "name": name, "per_page": 100}
     try:
         resp = requests.get(url, headers=HEADERS, params=params, timeout=10)
-        if resp.status_code == 200:
-            return resp.json().get("result", [])
-        else:
-            print(f"Error listing a-records {resp.status_code}: {resp.text}")
+        resp.raise_for_status()
+        return resp.json().get("result", [])
     except Exception as e:
         print(f"Exception listing A records: {e}")
-    return []
-
+        traceback.print_exc()
+        return []
 
 def delete_dns_record(record_id):
     url = f"https://api.cloudflare.com/client/v4/zones/{CF_ZONE_ID}/dns_records/{record_id}"
     try:
         resp = requests.delete(url, headers=HEADERS, timeout=10)
-        if resp.status_code == 200:
-            print(f"Deleted DNS record {record_id}")
-            return True
-        else:
-            print(f"Error deleting record {record_id}: {resp.status_code} {resp.text}")
+        resp.raise_for_status()
+        print(f"Deleted DNS record {record_id}")
+        return True
     except Exception as e:
-        print(f"Exception deleting record {record_id}: {e}")
-    return False
-
+        print(f"Exception deleting DNS record {record_id}: {e}")
+        traceback.print_exc()
+        return False
 
 def delete_all_a_records(name):
     records = list_a_records(name)
-    ok = True
+    success = True
     for rec in records:
         rid = rec.get("id")
         if rid:
-            ok = delete_dns_record(rid) and ok
-    return ok
-
+            success = delete_dns_record(rid) and success
+    return success
 
 def create_dns_record(name, ip):
     url = f"https://api.cloudflare.com/client/v4/zones/{CF_ZONE_ID}/dns_records"
-    data = {
-        "type": "A",
-        "name": name,
-        "content": ip,
-        # "ttl": 120,
-        # "proxied": False
-    }
+    data = {"type": "A", "name": name, "content": ip}
     try:
         resp = requests.post(url, headers=HEADERS, json=data, timeout=10)
-        if resp.status_code == 200:
-            print(f"Created DNS record {ip}")
-            return f"ip:{ip} added successfully"
-        else:
-            print(f"Error creating DNS record {ip}: {resp.status_code} {resp.text}")
-            return f"ip:{ip} add failed"
+        resp.raise_for_status()
+        print(f"Created DNS A record {ip}")
+        return f"ip:{ip} added successfully"
     except Exception as e:
         print(f"Exception creating DNS record {ip}: {e}")
+        traceback.print_exc()
         return f"ip:{ip} add failed"
-
 
 def push_plus(content):
     if not PUSHPLUS_TOKEN:
-        print("PushPlus token empty, skipped push")
+        print("PushPlus token empty, skipping push")
         return
     url = "http://www.pushplus.plus/send"
     data = {
@@ -142,34 +110,39 @@ def push_plus(content):
         "title": "IP优选DNSCF推送",
         "content": content,
         "template": "markdown",
-        "channel": "wechat"
+        "channel": "wechat",
     }
     try:
         requests.post(url, json=data, timeout=10)
     except Exception as e:
-        print(f"PushPlus error: {e}")
-
+        print(f"Exception pushing notifications: {e}")
+        traceback.print_exc()
 
 def main():
     domain = "cm.cf.cname.vvhan.com"
-    domain_ips = resolve_cname_recursive(domain)
+    github_ips_url = "https://raw.githubusercontent.com/gslege/CloudflareIP/main/Cfxyz.txt"
 
-    github_ips = get_ips_from_urls(
-        ["https://raw.githubusercontent.com/gslege/CloudflareIP/main/Cfxyz.txt"]
-    )
+    print(f"Getting IPs for domain {domain} via Google DNS")
+    domain_ips = get_ips_via_google_dns(domain)
+    print(f"Got domain IPs: {domain_ips}")
 
-    all_ips = list(dict.fromkeys(domain_ips + github_ips))  # 去重且保持顺序
+    print(f"Fetching IPs from GitHub raw {github_ips_url}")
+    github_ips = get_ips_from_github_raw(github_ips_url)
+    print(f"Got GitHub IPs: {github_ips}")
+
+    all_ips = list(dict.fromkeys(domain_ips + github_ips))
 
     if not all_ips:
-        print("No IPs fetched from domain or github.")
+        print("No IPs found to update.")
         return
 
-    max_records = os.getenv("CF_MAX_RECORDS")
-    if max_records and max_records.isdigit():
-        all_ips = all_ips[: int(max_records)]
+    max_records_env = os.getenv("CF_MAX_RECORDS")
+    if max_records_env and max_records_env.isdigit():
+        max_records = int(max_records_env)
+        all_ips = all_ips[:max_records]
 
     if not delete_all_a_records(CF_DNS_NAME):
-        print("Warning: Failed to delete all existing A records. Continuing...")
+        print("Warning: Failed to delete all existing A records; continuing.")
 
     results = [create_dns_record(CF_DNS_NAME, ip) for ip in all_ips]
 
