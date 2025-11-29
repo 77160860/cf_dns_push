@@ -16,15 +16,15 @@ HEADERS = {
     'Content-Type': 'application/json'
 }
 
-CHINA_TELECOM_DNS = ['114.114.114.114']
+ALIYUN_DNS_SERVERS = ['223.5.5.5']  # 这里指定阿里公共DNS
 
-def resolve_domain_ips_ctc(domain, depth=5, resolver=None):
+def resolve_domain_ips_aliyun(domain, depth=5, resolver=None):
     if depth == 0:
         return []
 
     if resolver is None:
         resolver = dns.resolver.Resolver(configure=False)
-        resolver.nameservers = CHINA_TELECOM_DNS
+        resolver.nameservers = ALIYUN_DNS_SERVERS
 
     ips = []
     try:
@@ -35,19 +35,19 @@ def resolve_domain_ips_ctc(domain, depth=5, resolver=None):
             cnames = resolver.resolve(domain, 'CNAME')
             for cname in cnames:
                 cname_target = cname.target.to_text().rstrip('.')
-                ips.extend(resolve_domain_ips_ctc(cname_target, depth - 1, resolver))
+                ips.extend(resolve_domain_ips_aliyun(cname_target, depth - 1, resolver))
         except Exception as e:
-            print(f"Failed to resolve CNAME: {e}")
+            print(f"阿里DNS解析CNAME失败: {e}")
     except Exception as e:
-        print(f"Failed to resolve A record: {e}")
+        print(f"阿里DNS解析A记录失败: {e}")
 
     seen = set()
-    unique = []
+    unique_ips = []
     for ip in ips:
         if ip not in seen:
             seen.add(ip)
-            unique.append(ip)
-    return unique
+            unique_ips.append(ip)
+    return unique_ips
 
 def extract_ipv4s(text: str):
     pattern = r'(?:\d{1,3}\.){3}\d{1,3}'
@@ -76,7 +76,7 @@ def get_ips_from_github_raw(url):
         print(f"Extracted {len(ips)} IPs from GitHub raw")
         return ips
     except Exception as e:
-        print(f"Exception fetching IPs from GitHub raw: {e}")
+        print(f"获取 GitHub IP列表异常: {e}")
         traceback.print_exc()
         return []
 
@@ -88,7 +88,7 @@ def list_a_records(name):
         resp.raise_for_status()
         return resp.json().get('result', [])
     except Exception as e:
-        print(f"Exception listing A records: {e}")
+        print(f"列出 A 记录异常: {e}")
         traceback.print_exc()
         return []
 
@@ -97,10 +97,10 @@ def delete_dns_record(record_id):
     try:
         resp = requests.delete(url, headers=HEADERS, timeout=10)
         resp.raise_for_status()
-        print(f"Deleted DNS record {record_id}")
+        print(f"删除 DNS 记录 {record_id} 成功")
         return True
     except Exception as e:
-        print(f"Exception deleting DNS record {record_id}: {e}")
+        print(f"删除 DNS 记录 {record_id} 失败: {e}")
         traceback.print_exc()
         return False
 
@@ -123,21 +123,21 @@ def create_dns_record(name, ip):
     try:
         resp = requests.post(url, headers=HEADERS, json=data, timeout=10)
         resp.raise_for_status()
-        print(f"Created DNS A record {ip}")
-        return f"ip:{ip} added successfully"
+        print(f"添加 DNS A 记录 {ip} 成功")
+        return f"ip:{ip} 添加成功"
     except Exception as e:
-        print(f"Exception creating DNS record {ip}: {e}")
+        print(f"添加 DNS A 记录 {ip} 失败: {e}")
         traceback.print_exc()
-        return f"ip:{ip} add failed"
+        return f"ip:{ip} 添加失败"
 
 def push_plus(content):
     if not PUSHPLUS_TOKEN:
-        print("PUSHPLUS_TOKEN empty, skipping push")
+        print("PUSHPLUS_TOKEN 为空，跳过推送")
         return
     url = "http://www.pushplus.plus/send"
     data = {
         "token": PUSHPLUS_TOKEN,
-        "title": "IP Optimized DNSCF Push",
+        "title": "IP优选DNSCF推送",
         "content": content,
         "template": "markdown",
         "channel": "wechat"
@@ -145,23 +145,23 @@ def push_plus(content):
     try:
         requests.post(url, json=data, timeout=10)
     except Exception as e:
-        print(f"PushPlus push error: {e}")
+        print(f"PushPlus 推送异常: {e}")
 
 def main():
     domain = "cm.cf.cname.vvhan.com"
     github_url = "https://raw.githubusercontent.com/gslege/CloudflareIP/main/Cfxyz.txt"
 
-    print(f"Resolving domain {domain} using 114.114.114.114")
-    domain_ips = resolve_domain_ips_ctc(domain)
-    print(f"Domain IPs resolved: {domain_ips}")
+    print(f"使用223.5.5.5解析 {domain}")
+    domain_ips = resolve_domain_ips_aliyun(domain)
+    print(f"解析到的域名IP: {domain_ips}")
 
-    print(f"Fetching IPs from GitHub raw {github_url}")
+    print(f"获取GitHub IP列表: {github_url}")
     github_ips = get_ips_from_github_raw(github_url)
-    print(f"GitHub IPs obtained: {github_ips}")
+    print(f"GitHub IP获取结果: {github_ips}")
 
     all_ips = list(dict.fromkeys(domain_ips + github_ips))
     if not all_ips:
-        print("No IPs obtained from any source, exiting.")
+        print("未获取到任何IP，退出。")
         return
 
     max_records = os.getenv("CF_MAX_RECORDS")
@@ -169,7 +169,7 @@ def main():
         all_ips = all_ips[:int(max_records)]
 
     if not delete_all_a_records(CF_DNS_NAME):
-        print("Failed to delete old A records, continuing.")
+        print("删除旧 A 记录失败，继续执行。")
 
     results = [create_dns_record(CF_DNS_NAME, ip) for ip in all_ips]
 
