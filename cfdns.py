@@ -4,7 +4,7 @@ import time
 import os
 import json
 import re
-import dns.resolver
+import subprocess
 
 CF_API_TOKEN = os.environ["CF_API_TOKEN"]
 CF_ZONE_ID = os.environ["CF_ZONE_ID"]
@@ -56,13 +56,14 @@ def get_ips_from_urls(urls, timeout=10, max_retries=3):
                 print(f"Attempt {attempt + 1} failed for {url}: {e}")
     return result
 
-def get_ips_from_domain(domain):
+def ping_get_ips(domain):
     try:
-        answers = dns.resolver.resolve(domain, 'A')
-        ips = [answer.to_text() for answer in answers]
-        return ips
+        # Linux/macOS ping 3次，输出中提取IP
+        output = subprocess.check_output(['ping', '-c', '3', domain], universal_newlines=True)
+        ips = re.findall(r'(\d+\.\d+\.\d+\.\d+)', output)
+        return list(dict.fromkeys(ips))  # 去重保序
     except Exception as e:
-        print(f"Failed to resolve {domain}: {e}")
+        print(f"Ping failed for {domain}: {e}")
         return []
 
 def list_a_records(name):
@@ -138,12 +139,11 @@ def push_plus(content):
 
 def main():
     domain = "cm.cf.cname.vvhan.com"
-    domain_ips = get_ips_from_domain(domain)
+    domain_ips = ping_get_ips(domain)
 
-    github_url = "https://raw.githubusercontent.com/gslege/CloudflareIP/main/Cfxyz.txt"
+    github_url = "https://raw.githubusercontent.com/gslege/CloudflareIP/main/cfxyz.txt"
     github_ips = get_ips_from_urls([github_url])
 
-    # 合并去重
     all_ips_set = set(domain_ips + github_ips)
     all_ips = list(all_ips_set)
 
