@@ -5,12 +5,9 @@ import os
 import json
 import re
 
-# API 密钥
 CF_API_TOKEN = os.environ["CF_API_TOKEN"]
-CF_ZONE_ID   = os.environ["CF_ZONE_ID"]
-CF_DNS_NAME  = os.environ["CF_DNS_NAME"]
-
-# pushplus_token（可留空）
+CF_ZONE_ID = os.environ["CF_ZONE_ID"]
+CF_DNS_NAME = os.environ["CF_DNS_NAME"]
 PUSHPLUS_TOKEN = os.environ.get("PUSHPLUS_TOKEN", "")
 
 headers = {
@@ -18,12 +15,11 @@ headers = {
     'Content-Type': 'application/json'
 }
 
-def _extract_ipv4s(text: str):
-    # 提取 IPv4 地址，去重且保持顺序
+def extract_ipv4s(text: str):
     candidates = re.findall(r'(?:\d{1,3}\.){3}\d{1,3}', text)
     def valid(ip):
         try:
-            parts = [int(p) for p in ip.split('.')]
+            parts = list(map(int, ip.split('.')))
             return len(parts) == 4 and all(0 <= p <= 255 for p in parts)
         except Exception:
             return False
@@ -35,30 +31,35 @@ def _extract_ipv4s(text: str):
             result.append(ip)
     return result
 
-def get_cf_ips_from_cloudflareyes(url="https://raw.githubusercontent.com/gslege/CloudflareIP/refs/heads/main/cfxyz.txt", timeout=10, max_retries=5):
-    for attempt in range(max_retries):
-        try:
-            resp = requests.get(url, timeout=timeout)
-            if resp.status_code == 200 and resp.text:
-                ips = _extract_ipv4s(resp.text)
-                if ips:
-                    return ips
-        except Exception as e:
-            traceback.print_exc()
-            print(f"get_cf_ips_from_cloudflareyes failed ({attempt + 1}/{max_retries}): {e}")
-    return []
+def get_ips_from_urls(urls, timeout=10, max_retries=5):
+    seen = set()
+    result = []
+    for url in urls:
+        for attempt in range(max_retries):
+            try:
+                resp = requests.get(url, timeout=timeout)
+                if resp.status_code == 200 and resp.text:
+                    ips = extract_ipv4s(resp.text)
+                    for ip in ips:
+                        if ip not in seen:
+                            seen.add(ip)
+                            result.append(ip)
+                    break
+            except Exception as e:
+                traceback.print_exc()
+                print(f"Failed to get IPs from {url} ({attempt+1}/{max_retries}): {e}")
+    return result
 
 def list_a_records(name):
-    # 只拉取该名称的 A 记录
     url = f'https://api.cloudflare.com/client/v4/zones/{CF_ZONE_ID}/dns_records'
     params = {'type': 'A', 'name': name, 'per_page': 100}
     try:
         r = requests.get(url, headers=headers, params=params, timeout=10)
         if r.status_code == 200:
             return r.json().get('result', [])
-        print('Error fetching DNS records:', r.text)
+        print('Failed fetching DNS records:', r.text)
     except Exception as e:
-        print(f"list_a_records exception: {e}")
+        print(f"Exception in list_a_records: {e}")
     return []
 
 def delete_dns_record(record_id):
@@ -66,51 +67,47 @@ def delete_dns_record(record_id):
     try:
         r = requests.delete(url, headers=headers, timeout=10)
         if r.status_code == 200:
-            print(f"cf_dns_delete success: ---- Time: {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime())} ---- id：{record_id}")
+            print(f"Deleted DNS record id={record_id} at {time.strftime('%Y-%m-%d %H:%M:%S')}")
             return True
-        else:
-            print(f"cf_dns_delete ERROR: ---- Time: {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime())} ---- STATUS: {r.status_code} ---- MESSAGE: {r.text}")
-            return False
+        print(f"Failed to delete DNS record id={record_id}: {r.status_code} {r.text}")
     except Exception as e:
         traceback.print_exc()
-        print(f"cf_dns_delete EXCEPTION: ---- Time: {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime())} ---- MESSAGE: {e}")
-        return False
+        print(f"Exception deleting DNS record id={record_id}: {e}")
+    return False
 
 def delete_all_a_records(name):
     records = list_a_records(name)
-    ok = True
+    success = True
     for rec in records:
         rid = rec.get('id')
         if rid:
-            ok = delete_dns_record(rid) and ok
-    return ok
+            success = delete_dns_record(rid) and success
+    return success
 
-def create_dns_record(name, cf_ip):
+def create_dns_record(name, ip):
     url = f'https://api.cloudflare.com/client/v4/zones/{CF_ZONE_ID}/dns_records'
     data = {
         'type': 'A',
         'name': name,
-        'content': cf_ip
-        # 可按需：'proxied': False, 'ttl': 120
+        'content': ip
     }
     try:
         resp = requests.post(url, headers=headers, json=data, timeout=10)
         if resp.status_code == 200:
-            print(f"cf_dns_create success: ---- Time: {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime())} ---- ip：{cf_ip}")
-            return f"ip:{cf_ip} 新增 {name} 成功"
-        else:
-            print(f"cf_dns_create ERROR: ---- Time: {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime())} ---- STATUS: {resp.status_code} ---- MESSAGE: {resp.text}")
-            return f"ip:{cf_ip} 新增 {name} 失败"
+            print(f"Created DNS A record {ip} for {name} at {time.strftime('%Y-%m-%d %H:%M:%S')}")
+            return f"ip:{ip} added to {name} successfully"
+        print(f"Failed to create DNS record {ip}: {resp.status_code} {resp.text}")
+        return f"ip:{ip} failed to add to {name}"
     except Exception as e:
         traceback.print_exc()
-        print(f"cf_dns_create EXCEPTION: ---- Time: {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime())} ---- MESSAGE: {e}")
-        return f"ip:{cf_ip} 新增 {name} 失败"
+        print(f"Exception creating DNS record for {ip}: {e}")
+        return f"ip:{ip} failed to add to {name}"
 
 def push_plus(content):
     if not PUSHPLUS_TOKEN:
-        print("push_plus skipped: PUSHPLUS_TOKEN is empty")
+        print("PushPlus skipped: token empty")
         return
-    url = 'http://www.pushplus.plus/send'
+    url = "http://www.pushplus.plus/send"
     data = {
         "token": PUSHPLUS_TOKEN,
         "title": "IP优选DNSCF推送",
@@ -118,36 +115,32 @@ def push_plus(content):
         "template": "markdown",
         "channel": "wechat"
     }
-    body = json.dumps(data).encode('utf-8')
-    headers_local = {'Content-Type': 'application/json'}
     try:
-        requests.post(url, data=body, headers=headers_local, timeout=10)
+        requests.post(url, json=data, timeout=10)
     except Exception as e:
-        print(f"push_plus error: {e}")
+        print(f"PushPlus error: {e}")
 
 def main():
-    # 1) 抓取 CloudFlareYes 页面里的 IPv4 列表
-    ip_addresses = get_cf_ips_from_cloudflareyes()
-    if not ip_addresses:
-        print("Error: 未从 CloudFlareYes 获取到任何 IP")
+    urls = [
+        "https://ip.164746.xyz/ipTop10.html",
+        "https://raw.githubusercontent.com/gslege/CloudflareIP/refs/heads/main/cfxyz.txt"
+    ]
+    ips = get_ips_from_urls(urls)
+    if not ips:
+        print("No IPs fetched from sources.")
         return
 
-    # 可选：限制最大创建数量（不设置则使用全部抓到的 IP）
-    max_records_env = os.getenv("CF_MAX_RECORDS")
-    target_ips = ip_addresses[:int(max_records_env)] if max_records_env else ip_addresses
+    max_records = os.getenv("CF_MAX_RECORDS")
+    if max_records and max_records.isdigit():
+        ips = ips[:int(max_records)]
 
-    # 2) 删除该名称下的全部 A 记录
     if not delete_all_a_records(CF_DNS_NAME):
-        print("Error: 删除现有 A 记录时出现错误（已尽力删除继续执行）")
+        print("Error deleting existing A records, continuing...")
 
-    # 3) 按抓到的 IP 数量逐条创建 A 记录
-    results = []
-    for ip in target_ips:
-        results.append(create_dns_record(CF_DNS_NAME, ip))
+    results = [create_dns_record(CF_DNS_NAME, ip) for ip in ips]
 
-    # 4) 推送结果
     if results:
-        push_plus('\n'.join(results))
+        push_plus("\n".join(results))
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()
