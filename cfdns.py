@@ -4,7 +4,7 @@ import time
 import os
 import json
 import re
-import socket
+import dns.resolver
 
 CF_API_TOKEN = os.environ["CF_API_TOKEN"]
 CF_ZONE_ID = os.environ["CF_ZONE_ID"]
@@ -56,13 +56,23 @@ def get_ips_from_urls(urls, timeout=10, max_retries=3):
                 print(f"Attempt {attempt + 1} failed for {url}: {e}")
     return result
 
-def get_ips_from_domain_socket(domain):
+def resolve_domain_ips(domain, depth=5):
+    """递归解析CNAME直到拿到A记录，防止死循环通过depth限制"""
+    if depth == 0:
+        return []
     try:
-        infos = socket.getaddrinfo(domain, None)
-        ips = list(dict.fromkeys([info[4][0] for info in infos]))
-        return ips
+        answers = dns.resolver.resolve(domain, 'A')
+        return [rdata.to_text() for rdata in answers]
+    except dns.resolver.NoAnswer:
+        try:
+            cnames = dns.resolver.resolve(domain, 'CNAME')
+            for cname in cnames:
+                cname_target = cname.target.to_text().rstrip('.')
+                return resolve_domain_ips(cname_target, depth-1)
+        except Exception:
+            return []
     except Exception as e:
-        print(f"Socket DNS lookup failed for {domain}: {e}")
+        print(f"Error resolving domain {domain}: {e}")
         return []
 
 def list_a_records(name):
@@ -138,7 +148,7 @@ def push_plus(content):
 
 def main():
     domain = "cm.cf.cname.vvhan.com"
-    domain_ips = get_ips_from_domain_socket(domain)
+    domain_ips = resolve_domain_ips(domain)
 
     github_url = "https://raw.githubusercontent.com/gslege/CloudflareIP/main/Cfxyz.txt"
     github_ips = get_ips_from_urls([github_url])
