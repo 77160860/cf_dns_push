@@ -4,6 +4,7 @@ import time
 import os
 import json
 import re
+import dns.resolver
 
 CF_API_TOKEN = os.environ["CF_API_TOKEN"]
 CF_ZONE_ID = os.environ["CF_ZONE_ID"]
@@ -54,6 +55,15 @@ def get_ips_from_urls(urls, timeout=10, max_retries=3):
                 traceback.print_exc()
                 print(f"Attempt {attempt + 1} failed for {url}: {e}")
     return result
+
+def get_ips_from_domain(domain):
+    try:
+        answers = dns.resolver.resolve(domain, 'A')
+        ips = [answer.to_text() for answer in answers]
+        return ips
+    except Exception as e:
+        print(f"Failed to resolve {domain}: {e}")
+        return []
 
 def list_a_records(name):
     url = f'https://api.cloudflare.com/client/v4/zones/{CF_ZONE_ID}/dns_records'
@@ -127,23 +137,28 @@ def push_plus(content):
         print(f"PushPlus error: {e}")
 
 def main():
-    urls = [
-        "https://ip.164746.xyz/ipTop10.html",
-        "https://raw.githubusercontent.com/gslege/CloudflareIP/refs/heads/main/Cfxyz.txt"
-    ]
-    ips = get_ips_from_urls(urls)
-    if not ips:
-        print("No IPs fetched.")
+    domain = "cm.cf.cname.vvhan.com"
+    domain_ips = get_ips_from_domain(domain)
+
+    github_url = "https://raw.githubusercontent.com/gslege/CloudflareIP/main/Cfxyz.txt"
+    github_ips = get_ips_from_urls([github_url])
+
+    # 合并去重
+    all_ips_set = set(domain_ips + github_ips)
+    all_ips = list(all_ips_set)
+
+    if not all_ips:
+        print("No IPs fetched from domain or github.")
         return
 
-    max_records = os.getenv("CF_MAX_RECORDS")  # 这里已修正引号
+    max_records = os.getenv("CF_MAX_RECORDS")
     if max_records and max_records.isdigit():
-        ips = ips[:int(max_records)]
+        all_ips = all_ips[:int(max_records)]
 
     if not delete_all_a_records(CF_DNS_NAME):
         print("Error deleting existing DNS A records, continuing...")
 
-    results = [create_dns_record(CF_DNS_NAME, ip) for ip in ips]
+    results = [create_dns_record(CF_DNS_NAME, ip) for ip in all_ips]
 
     push_plus("\n".join(results))
 
