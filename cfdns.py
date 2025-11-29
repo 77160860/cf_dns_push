@@ -15,7 +15,7 @@ HEADERS = {
     'Content-Type': 'application/json'
 }
 
-DNS_SERVERS = ['8.8.8.8', '223.5.5.5']
+DNS_SERVERS = ['8.8.8.8']
 
 def resolve_domain_ips_multi_dns(domain, depth=5):
     if depth == 0:
