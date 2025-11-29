@@ -15,7 +15,7 @@ HEADERS = {
     'Content-Type': 'application/json'
 }
 
-DNS_SERVERS = ['8.8.8.8']
+DNS_SERVERS = ['223.5.5.5']
 
 def resolve_domain_ips_multi_dns(domain, depth=5):
     if depth == 0:
@@ -135,7 +135,7 @@ def push_plus(content):
         print(f"PushPlus push error: {e}")
 
 def main():
-    domain = "cm.cf.cname.vvhan.com"
+    domain = "cf.vvhan.com"
     github_url = "https://raw.githubusercontent.com/gslege/CloudflareIP/main/Cfxyz.txt"
 
     print(f"Resolving domain {domain} using DNS servers {DNS_SERVERS}")
