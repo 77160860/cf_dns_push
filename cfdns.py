@@ -1,10 +1,10 @@
+import dns.resolver
 import requests
 import traceback
 import time
 import os
 import json
 import re
-import dns.resolver
 
 CF_API_TOKEN = os.environ["CF_API_TOKEN"]
 CF_ZONE_ID = os.environ["CF_ZONE_ID"]
@@ -57,7 +57,7 @@ def get_ips_from_urls(urls, timeout=10, max_retries=3):
     return result
 
 def resolve_domain_ips(domain, depth=5):
-    """递归解析CNAME直到拿到A记录，防止死循环通过depth限制"""
+    """递归解析域名CNAME直到拿到A记录，避免死循环"""
     if depth == 0:
         return []
     try:
