@@ -4,7 +4,7 @@ import time
 import os
 import json
 import re
-import subprocess
+import socket
 
 CF_API_TOKEN = os.environ["CF_API_TOKEN"]
 CF_ZONE_ID = os.environ["CF_ZONE_ID"]
@@ -56,14 +56,13 @@ def get_ips_from_urls(urls, timeout=10, max_retries=3):
                 print(f"Attempt {attempt + 1} failed for {url}: {e}")
     return result
 
-def ping_get_ips(domain):
+def get_ips_from_domain_socket(domain):
     try:
-        # Linux/macOS ping 3次，输出中提取IP
-        output = subprocess.check_output(['ping', '-c', '3', domain], universal_newlines=True)
-        ips = re.findall(r'(\d+\.\d+\.\d+\.\d+)', output)
-        return list(dict.fromkeys(ips))  # 去重保序
+        infos = socket.getaddrinfo(domain, None)
+        ips = list(dict.fromkeys([info[4][0] for info in infos]))
+        return ips
     except Exception as e:
-        print(f"Ping failed for {domain}: {e}")
+        print(f"Socket DNS lookup failed for {domain}: {e}")
         return []
 
 def list_a_records(name):
@@ -139,7 +138,7 @@ def push_plus(content):
 
 def main():
     domain = "cm.cf.cname.vvhan.com"
-    domain_ips = ping_get_ips(domain)
+    domain_ips = get_ips_from_domain_socket(domain)
 
     github_url = "https://raw.githubusercontent.com/gslege/CloudflareIP/main/Cfxyz.txt"
     github_ips = get_ips_from_urls([github_url])
