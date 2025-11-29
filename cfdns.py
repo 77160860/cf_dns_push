@@ -129,7 +129,7 @@ def push_plus(content):
 def main():
     urls = [
         "https://ip.164746.xyz/ipTop10.html",
-        "https://raw.githubusercontent.com/gslege/CloudflareIP/refs/heads/main/CFxyz.txt"
+        "https://raw.githubusercontent.com/gslege/CloudflareIP/refs/heads/main/Cfxyz.txt"
     ]
     ips = get_ips_from_urls(urls)
     if not ips:
