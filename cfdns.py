@@ -136,4 +136,16 @@ def main():
         print("No IPs fetched.")
         return
 
-    max_records = os.getenv("
+    max_records = os.getenv("CF_MAX_RECORDS")  # 这里已修正引号
+    if max_records and max_records.isdigit():
+        ips = ips[:int(max_records)]
+
+    if not delete_all_a_records(CF_DNS_NAME):
+        print("Error deleting existing DNS A records, continuing...")
+
+    results = [create_dns_record(CF_DNS_NAME, ip) for ip in ips]
+
+    push_plus("\n".join(results))
+
+if __name__ == "__main__":
+    main()
