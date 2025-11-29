@@ -15,7 +15,7 @@ HEADERS = {
     'Content-Type': 'application/json'
 }
 
-DNS_SERVERS = ['202.102.224.68', '223.5.5.5']
+DNS_SERVERS = ['8.8.8.8', '223.5.5.5']
 
 def resolve_domain_ips_multi_dns(domain, depth=5):
     if depth == 0:
@@ -33,7 +33,7 @@ def resolve_domain_ips_multi_dns(domain, depth=5):
                 cnames = resolver.resolve(domain, 'CNAME')
                 for cname in cnames:
                     cname_target = cname.target.to_text().rstrip('.')
-                    ips.update(resolve_domain_ips_multi_dns(cname_target, depth -1))
+                    ips.update(resolve_domain_ips_multi_dns(cname_target, depth - 1))
             except Exception as e:
                 print(f"CNAME query failed on server {server} for {domain}: {e}")
         except Exception as e:
