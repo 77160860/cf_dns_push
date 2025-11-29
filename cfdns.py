@@ -141,7 +141,7 @@ def main():
     domain = "cm.cf.cname.vvhan.com"
     domain_ips = ping_get_ips(domain)
 
-    github_url = "https://raw.githubusercontent.com/gslege/CloudflareIP/main/cfxyz.txt"
+    github_url = "https://raw.githubusercontent.com/gslege/CloudflareIP/main/Cfxyz.txt"
     github_ips = get_ips_from_urls([github_url])
 
     all_ips_set = set(domain_ips + github_ips)
