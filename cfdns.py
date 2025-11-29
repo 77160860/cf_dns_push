@@ -136,7 +136,7 @@ def push_plus(content):
 
 def main():
     domain = "cf.vvhan.com"
-    github_url = "https://raw.githubusercontent.com/gslege/CloudflareIP/main/Cfxyz.txt"
+    github_url = "https://ip.164746.xyz/ipTop.html"
 
     print(f"Resolving domain {domain} using DNS servers {DNS_SERVERS}")
     domain_ips = resolve_domain_ips_multi_dns(domain)
