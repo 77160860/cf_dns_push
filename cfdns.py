@@ -18,10 +18,11 @@ HEADERS = {
 
 ALIYUN_DNS_SERVERS = ['223.5.5.5', '223.6.6.6']
 
+
 def resolve_domain_ips_aliyun(domain, depth=5):
-    """通过阿里云DNS递归解析域名IPv4地址"""
     if depth == 0:
         return []
+
     resolver = dns.resolver.Resolver(configure=False)
     resolver.nameservers = ALIYUN_DNS_SERVERS
     try:
@@ -40,15 +41,18 @@ def resolve_domain_ips_aliyun(domain, depth=5):
         print(f"阿里DNS查询 A 记录失败: {e}")
         return []
 
+
 def extract_ipv4s(text: str):
     pattern = r'(?:\d{1,3}\.){3}\d{1,3}'
     candidates = re.findall(pattern, text)
+
     def valid(ip):
         try:
             parts = [int(p) for p in ip.split('.')]
             return len(parts) == 4 and all(0 <= p <= 255 for p in parts)
         except Exception:
             return False
+
     seen = set()
     result = []
     for ip in candidates:
@@ -56,6 +60,7 @@ def extract_ipv4s(text: str):
             seen.add(ip)
             result.append(ip)
     return result
+
 
 def get_ips_from_github_raw(url):
     try:
@@ -71,6 +76,7 @@ def get_ips_from_github_raw(url):
         traceback.print_exc()
         return []
 
+
 def list_a_records(name):
     url = f"https://api.cloudflare.com/client/v4/zones/{CF_ZONE_ID}/dns_records"
     params = {'type':'A', 'name':name, 'per_page':100}
@@ -82,6 +88,7 @@ def list_a_records(name):
         print(f"列出 A 记录异常: {e}")
         traceback.print_exc()
         return []
+
 
 def delete_dns_record(record_id):
     url = f"https://api.cloudflare.com/client/v4/zones/{CF_ZONE_ID}/dns_records/{record_id}"
@@ -95,6 +102,7 @@ def delete_dns_record(record_id):
         traceback.print_exc()
         return False
 
+
 def delete_all_a_records(name):
     records = list_a_records(name)
     success = True
@@ -104,12 +112,13 @@ def delete_all_a_records(name):
             success = delete_dns_record(rid) and success
     return success
 
+
 def create_dns_record(name, ip):
     url = f"https://api.cloudflare.com/client/v4/zones/{CF_ZONE_ID}/dns_records"
     data = {
         'type':'A',
-        'name': name,
-        'content': ip,
+        'name':name,
+        'content':ip,
     }
     try:
         resp = requests.post(url, headers=HEADERS, json=data, timeout=10)
@@ -120,6 +129,7 @@ def create_dns_record(name, ip):
         print(f"添加 DNS A 记录 {ip} 失败: {e}")
         traceback.print_exc()
         return f"ip:{ip} 添加失败"
+
 
 def push_plus(content):
     if not PUSHPLUS_TOKEN:
@@ -137,6 +147,7 @@ def push_plus(content):
         requests.post(url, json=data, timeout=10)
     except Exception as e:
         print(f"PushPlus 推送异常: {e}")
+
 
 def main():
     domain = "cm.cf.cname.vvhan.com"
@@ -165,6 +176,7 @@ def main():
     results = [create_dns_record(CF_DNS_NAME, ip) for ip in all_ips]
 
     push_plus("\n".join(results))
+
 
 if __name__ == "__main__":
     main()
