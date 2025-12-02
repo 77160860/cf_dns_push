@@ -81,6 +81,9 @@ def main():
         print("No IPs found; exiting")
         return
 
+    # 去重IP，避免重复添加导致的400错误
+    github_ips = list(dict.fromkeys(github_ips))
+
     max_records = os.getenv('CF_MAX_RECORDS')
     if max_records and max_records.isdigit():
         github_ips = github_ips[:int(max_records)]
