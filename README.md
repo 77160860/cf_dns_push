@@ -10,6 +10,7 @@ https://ip.164746.xyz/ipTop10.html
 
 cdn.7zz.cn
 
+saas.sin.fan
 #### 配置方法
 1. fork本项目
 2. 打开项目的settings，Actions secrets and variables，action  ，new  Repository secrets 逐个添加以下的内容
