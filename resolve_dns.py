@@ -1,7 +1,7 @@
 import dns.resolver
 import ipaddress
 
-DNS_SERVERS = ['223.5.5.5']
+DNS_SERVERS = ['223.5.5.5', '114.114.114.114']
 
 def is_valid_ipv4(ip):
     try:
