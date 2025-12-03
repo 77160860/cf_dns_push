@@ -101,7 +101,7 @@ def create_dns_record(name, ip):
         return f"ip:{ip} add failed"
 
 def main():
-    domain = 'cf.vvhan.com'
+    domain = 'cm.cf.cname.vvhan.com'
     github_url = 'https://ip.164746.xyz/ipTop.html'
 
     domain_ips = resolve_domain_ips(domain)
