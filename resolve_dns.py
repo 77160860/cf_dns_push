@@ -1,12 +1,12 @@
 import dns.resolver
 import ipaddress
 
-DNS_SERVERS = ['223.5.5.5', '8.8.8.8']
+DNS_SERVERS = ['1.1.1.1', '8.8.8.8']
 
 def is_valid_ipv4(ip):
     try:
         return isinstance(ipaddress.ip_address(ip), ipaddress.IPv4Address)
-    except:
+    except ValueError:
         return False
 
 def resolve_all_ips(domain, depth=5):
@@ -31,7 +31,7 @@ def resolve_all_ips(domain, depth=5):
             for cname in cnames:
                 target = cname.target.to_text().rstrip('.')
                 print(f"[CNAME] {domain} -> {target}")
-                ips.update(resolve_all_ips(target, depth-1))
+                ips.update(resolve_all_ips(target, depth - 1))
         except Exception as e:
             print(f"CNAME查询失败: {e}")
     except Exception as e:
@@ -41,6 +41,6 @@ def resolve_all_ips(domain, depth=5):
 if __name__ == '__main__':
     domain = 'cm.cf.cname.vvhan.com'
     ips = resolve_all_ips(domain)
-    print(f"\nPython解析得到的A记录IP：")
+    print("\nPython脚本解析A记录结果：")
     for ip in ips:
         print(ip)
