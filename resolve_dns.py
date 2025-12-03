@@ -1,7 +1,7 @@
 import dns.resolver
 import ipaddress
 
-DNS_SERVERS = ['223.5.5.5', '114.114.114.114']
+DNS_SERVERS = ['223.5.5.5', '8.8.8.8']
 
 def is_valid_ipv4(ip):
     try:
@@ -17,7 +17,6 @@ def resolve_all_ips(domain, depth=5):
     resolver.nameservers = DNS_SERVERS
     ips = set()
     try:
-        # 查询A记录
         answers = resolver.resolve(domain, 'A')
         for rdata in answers:
             ip = rdata.to_text()
@@ -28,7 +27,6 @@ def resolve_all_ips(domain, depth=5):
             return list(ips)
     except dns.resolver.NoAnswer:
         try:
-            # 查询CNAME
             cnames = resolver.resolve(domain, 'CNAME')
             for cname in cnames:
                 target = cname.target.to_text().rstrip('.')
@@ -40,19 +38,9 @@ def resolve_all_ips(domain, depth=5):
         print(f"A记录查询失败: {e}")
     return list(ips)
 
-if __name__ == "__main__":
-    domains = [
-        "cm.cf.cname.vvhan.com",
-        "ct.cf.cname.vvhan.com",
-        "cu.cf.cname.vvhan.com",
-    ]
-
-    all_ips = {}
-
-    for dom in domains:
-        ips = resolve_all_ips(dom)
-        all_ips[dom] = ips
-
-    print("\n所有域名解析结果：")
-    for dom, ips in all_ips.items():
-        print(f"{dom} : {ips}")
+if __name__ == '__main__':
+    domain = 'cm.cf.cname.vvhan.com'
+    ips = resolve_all_ips(domain)
+    print(f"\nPython解析得到的A记录IP：")
+    for ip in ips:
+        print(ip)
