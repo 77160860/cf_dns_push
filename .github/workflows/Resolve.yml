@@ -1,22 +1,29 @@
-name: Resolve DNS IPs
+name: DNS Resolve Test
 
 on:
   workflow_dispatch:
 
 jobs:
-  resolve:
+  dns-check:
     runs-on: ubuntu-latest
+
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
+    - name: 输出系统dig版本，确认有dig命令
+      run: dig -v
 
-      - name: Set up Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: '3.x'
+    - name: 使用系统dig查询 A 记录
+      run: |
+        echo "使用系统dig命令查询 cm.cf.cname.vvhan.com 的A记录:"
+        dig +short A cm.cf.cname.vvhan.com
 
-      - name: Install dnspython
-        run: pip install dnspython
+    - name: 设置Python环境
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.x'
 
-      - name: Run DNS resolve script
-        run: python resolve_dns.py
+    - name: 安装dnspython库
+      run: pip install dnspython
+
+    - name: 运行Python解析脚本
+      run: python resolve_dns.py
+      # 确保你的resolve_dns.py文件被commit到仓库里，且同目录
