@@ -11,7 +11,7 @@ HEADERS = {
     'Authorization': f'Bearer {CF_API_TOKEN}',
     'Content-Type': 'application/json'
 }
-DNS_SERVERS = ['114.114.114.114']
+DNS_SERVERS = ['223.5.5.5']
 
 def resolve_domain_ips(domain, depth=5):
     if depth == 0:
