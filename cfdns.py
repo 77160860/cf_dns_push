@@ -3,7 +3,6 @@ import requests
 import traceback
 import re
 import os
-import ipaddress
 
 CF_API_TOKEN = os.environ["CF_API_TOKEN"]
 CF_ZONE_ID = os.environ["CF_ZONE_ID"]
@@ -12,7 +11,7 @@ HEADERS = {
     'Authorization': f'Bearer {CF_API_TOKEN}',
     'Content-Type': 'application/json'
 }
-DNS_SERVERS = ['8.8.8.8', '114.114.114.114']
+DNS_SERVERS = ['223.5.5.5']
 
 def resolve_domain_ips(domain, depth=5):
     if depth == 0:
@@ -23,15 +22,12 @@ def resolve_domain_ips(domain, depth=5):
     try:
         answers = resolver.resolve(domain, 'A')
         ips.update(rdata.to_text() for rdata in answers)
-        print(f"A records for {domain}: {ips}")
     except dns.resolver.NoAnswer:
-        # try CNAME
         try:
             cnames = resolver.resolve(domain, 'CNAME')
             for cname in cnames:
                 target = cname.target.to_text().rstrip('.')
-                print(f"CNAME found for {domain}: {target}")
-                ips.update(resolve_domain_ips(target, depth -1))
+                ips.update(resolve_domain_ips(target, depth - 1))
         except Exception as e:
             print(f"CNAME query failed for {domain}: {e}")
     except Exception as e:
@@ -41,23 +37,21 @@ def resolve_domain_ips(domain, depth=5):
 def extract_ipv4s(text):
     pattern = r'(?:\d{1,3}\.){3}\d{1,3}'
     candidates = re.findall(pattern, text)
+    seen = set()
     result = []
     for ip in candidates:
-        try:
-            if isinstance(ipaddress.ip_address(ip), ipaddress.IPv4Address):
-                if ip not in result:
-                    result.append(ip)
-        except ValueError:
-            continue
+        parts = ip.split('.')
+        if len(parts) ==4 and all(p.isdigit() and 0 <= int(p) <=255 for p in parts):
+            if ip not in seen:
+                seen.add(ip)
+                result.append(ip)
     return result
 
 def get_ips_from_url(url):
-    headers = {"User-Agent": "Mozilla/5.0"}
     try:
-        r = requests.get(url, headers=headers, timeout=15)
+        r = requests.get(url, timeout=15)
         r.raise_for_status()
         ips = extract_ipv4s(r.text)
-        print(f"Extracted IPs from {url}: {ips}")
         return ips
     except Exception:
         traceback.print_exc()
@@ -111,11 +105,11 @@ def main():
     github_url = 'https://ip.164746.xyz/ipTop.html'
 
     domain_ips = resolve_domain_ips(domain)
+    print(f"Domain IPs: {domain_ips}")
     github_ips = get_ips_from_url(github_url)
+    print(f"GitHub IPs: {github_ips}")
+
     all_ips = list(dict.fromkeys(domain_ips + github_ips))
-
-    print(f"All IPs to add: {all_ips}")
-
     if not all_ips:
         print("No IPs found; exiting")
         return
