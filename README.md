@@ -1,16 +1,11 @@
-电信可选接口:
+可选接口:
 
 https://ip.164746.xyz/ipTop.html 
 
 https://ip.164746.xyz/ipTop10.html
 
-移动可选接口:
-
-*.cf.cname.vvhan.com
-
-cdn.7zz.cn
-
 saas.sin.fan
+
 #### 配置方法
 1. fork本项目
 2. 打开项目的settings，secrets and variables，action  ，new  Repository secrets 逐个添加以下的内容
